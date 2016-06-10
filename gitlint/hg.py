@@ -36,12 +36,16 @@ def last_commit():
         root = subprocess.check_output(['hg', 'parent', '--template={node}'],
                                        stderr=subprocess.STDOUT).strip()
         # Convert to unicode first
-        return root.decode('utf-8')
+        return root.decode('utf-8'), None
     except subprocess.CalledProcessError:
-        return None
+        return None, None
 
 
-def modified_files(root, tracked_only=False, commit=None):
+def branch_commit(branch):
+    raise NotImplementedError('Branch commits are not implemented for hg')
+
+
+def modified_files(root, tracked_only=False, commit_a=None, commit_b=None):
     """Returns a list of files that has been modified since the last commit.
 
     Args:
@@ -57,8 +61,8 @@ def modified_files(root, tracked_only=False, commit=None):
     assert os.path.isabs(root), "Root has to be absolute, got: %s" % root
 
     command = ['hg', 'status']
-    if commit:
-        command.append('--change=%s' % commit)
+    if commit_a:
+        command.append('--change=%s' % commit_a)
 
     # Convert to unicode and split
     status_lines = subprocess.check_output(
@@ -78,7 +82,7 @@ def modified_files(root, tracked_only=False, commit=None):
                 for filename, mode in modified_file_status)
 
 
-def modified_lines(filename, extra_data, commit=None):
+def modified_lines(filename, extra_data, commit_a=None, commit_b=None):
     """Returns the lines that have been modifed for this file.
 
     Args:
@@ -99,8 +103,8 @@ def modified_lines(filename, extra_data, commit=None):
         return None
 
     command = ['hg', 'diff', '-U', '0']
-    if commit:
-        command.append('--change=%s' % commit)
+    if commit_a:
+        command.append('--change=%s' % commit_a)
     command.append(filename)
 
     # Split as bytes, as the output may have some non unicode characters.

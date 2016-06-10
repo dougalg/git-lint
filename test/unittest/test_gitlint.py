@@ -66,7 +66,7 @@ class GitLintTest(unittest.TestCase):
         self.addCleanup(self.git_modified_lines_patch.stop)
 
         self.git_last_commit_patch = mock.patch(
-            'gitlint.git.last_commit', return_value="abcd" * 10)
+            'gitlint.git.last_commit', return_value=("abcd" * 10, "abcd" * 10))
         self.git_last_commit = self.git_last_commit_patch.start()
         self.addCleanup(self.git_last_commit_patch.stop)
 
@@ -82,15 +82,15 @@ class GitLintTest(unittest.TestCase):
         self.git_modified_lines.reset_mock()
         self.lint.reset_mock()
 
-    def assert_mocked_calls(self, tracked_only=False, commit=None):
+    def assert_mocked_calls(self, tracked_only=False, commit_a=None, commit_b=None):
         """Checks if the mocks were called as expected.
 
         This method exists to avoid duplication.
         """
         self.git_modified_files.assert_called_once_with(
-            self.root, tracked_only=tracked_only, commit=commit)
+            self.root, tracked_only=tracked_only, commit_a=commit_a, commit_b=commit_b)
         self.git_modified_lines.assert_called_once_with(
-            self.filename, ' M', commit=commit)
+            self.filename, ' M', commit_a=commit_a, commit_b=commit_b)
         self.lint.assert_called_once_with(
             self.filename, [3, 14], self.git_lint_config)
 
@@ -131,7 +131,7 @@ class GitLintTest(unittest.TestCase):
         self.assertEqual(
             0, gitlint.main([], stdout=None, stderr=None))
         self.git_modified_files.assert_called_once_with(
-            self.root, tracked_only=False, commit=None)
+            self.root, tracked_only=False, commit_a=None, commit_b=None)
 
     def test_main_file_changed_and_still_valid(self):
         lint_response = {
@@ -159,7 +159,7 @@ class GitLintTest(unittest.TestCase):
             gitlint.main(
                 ['git-lint', '--last-commit'], stdout=self.stdout, stderr=None))
         self.assertIn('OK', self.stdout.getvalue())
-        self.assert_mocked_calls(commit='abcd' * 10)
+        self.assert_mocked_calls(commit_a='abcd' * 10, commit_b='abcd' * 10)
 
     def test_main_file_changed_and_still_valid_tracked_only(self):
         lint_response = {
@@ -351,7 +351,7 @@ class GitLintTest(unittest.TestCase):
         self.assertIn('line 3: error', self.stdout.getvalue())
 
         self.git_modified_files.assert_called_once_with(
-            self.root, tracked_only=False, commit=None)
+            self.root, tracked_only=False, commit_a=None, commit_b=None)
         self.lint.assert_called_once_with(
             self.filename, None, self.git_lint_config)
 
@@ -364,7 +364,7 @@ class GitLintTest(unittest.TestCase):
         self.assertIn('line 3: error', self.stdout.getvalue())
 
         self.git_modified_files.assert_called_once_with(
-            self.root, tracked_only=False, commit=None)
+            self.root, tracked_only=False, commit_a=None, commit_b=None)
         self.lint.assert_called_once_with(
             self.filename, None, self.git_lint_config)
 
@@ -399,10 +399,10 @@ class GitLintTest(unittest.TestCase):
                           self.stdout.getvalue())
 
             self.git_modified_files.assert_called_once_with(
-                self.root, tracked_only=False, commit=None)
+                self.root, tracked_only=False, commit_a=None, commit_b=None)
             expected_calls = [
-                mock.call(self.filename, ' M', commit=None),
-                mock.call(self.filename2, None, commit=None),
+                mock.call(self.filename, ' M', commit_a=None, commit_b=None),
+                mock.call(self.filename2, None, commit_a=None, commit_b=None),
             ]
             self.assertEqual(expected_calls,
                              self.git_modified_lines.call_args_list)
@@ -435,9 +435,9 @@ class GitLintTest(unittest.TestCase):
             self.assertEqual('', self.stderr.getvalue())
 
             self.git_modified_files.assert_called_once_with(
-                self.root, tracked_only=False, commit=None)
-            expected_calls = [mock.call(self.filename, ' M', commit=None),
-                              mock.call(self.filename2, None, commit=None)]
+                self.root, tracked_only=False, commit_a=None, commit_b=None)
+            expected_calls = [mock.call(self.filename, ' M', commit_a=None, commit_b=None),
+                              mock.call(self.filename2, None, commit_a=None, commit_b=None)]
             self.assertEqual(expected_calls,
                              self.git_modified_lines.call_args_list)
             expected_calls = [

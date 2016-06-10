@@ -262,6 +262,11 @@ Contributors
 Changelog
 =========
 
+v0.0.9 (2016-06-12)
+-------------------
+
+* Add support for comparing branches with --branch=<BRANCH>
+
 v0.0.8 (2015-10-14)
 -------------------
 

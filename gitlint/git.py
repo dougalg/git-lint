@@ -15,31 +15,45 @@
 
 import os.path
 import subprocess
+import itertools
+import re
 
 import gitlint.utils as utils
+
+
+def rev_parse(commit):
+    """Returns a SHA1 of a commit or banch"""
+    args = ['git', 'rev-parse', commit]
+    return (
+        subprocess
+            .check_output(args, stderr=subprocess.STDOUT)
+            .strip()
+            .decode('utf-8')
+        )
 
 
 def repository_root():
     """Returns the root of the repository as an absolute path."""
     try:
-        root = subprocess.check_output(['git', 'rev-parse', '--show-toplevel'],
-                                       stderr=subprocess.STDOUT).strip()
-        # Convert to unicode first
-        return root.decode('utf-8')
+        return rev_parse('--show-toplevel')
     except subprocess.CalledProcessError:
         return None
 
 
 def last_commit():
-    """Returns the SHA1 of the last commit."""
+    """Returns the SHA1 of the last 2 commits."""
     try:
-        root = subprocess.check_output(['git', 'rev-parse', 'HEAD'],
-                                       stderr=subprocess.STDOUT).strip()
-        # Convert to unicode first
-        return root.decode('utf-8')
+        return rev_parse('HEAD'), rev_parse('HEAD~1')
+    except subprocess.CalledProcessError:
+        return None, None
+
+
+def branch_commit(branch):
+    """"Returns the SHA1 of the last commit in HEAD and target branch"""
+    try:
+        return rev_parse('HEAD'), rev_parse(branch)
     except subprocess.CalledProcessError:
         return None
-
 
 def _remove_filename_quotes(filename):
     """Removes the quotes from a filename returned by git status."""
@@ -49,7 +63,7 @@ def _remove_filename_quotes(filename):
     return filename
 
 
-def modified_files(root, tracked_only=False, commit=None):
+def modified_files(root, tracked_only=False, commit_a=None, commit_b=None):
     """Returns a list of files that has been modified since the last commit.
 
     Args:
@@ -64,8 +78,8 @@ def modified_files(root, tracked_only=False, commit=None):
     """
     assert os.path.isabs(root), "Root has to be absolute, got: %s" % root
 
-    if commit:
-        return _modified_files_with_commit(root, commit)
+    if commit_a:
+        return _modified_files_with_commit(root, commit_a, commit_b)
 
     # Convert to unicode and split
     status_lines = subprocess.check_output([
@@ -86,11 +100,11 @@ def modified_files(root, tracked_only=False, commit=None):
                 for filename, mode in modified_file_status)
 
 
-def _modified_files_with_commit(root, commit):
+def _modified_files_with_commit(root, commit_a, commit_b):
     # Convert to unicode and split
     status_lines = subprocess.check_output(
         ['git', 'diff-tree', '-r', '--root', '--no-commit-id', '--name-status',
-         commit]).decode('utf-8').split(os.linesep)
+         commit_a, commit_b]).decode('utf-8').split(os.linesep)
 
     modified_file_status = utils.filter_lines(
         status_lines,
@@ -103,37 +117,59 @@ def _modified_files_with_commit(root, commit):
                  mode + ' ') for filename, mode in modified_file_status)
 
 
-def modified_lines(filename, extra_data, commit=None):
+def modified_lines(filename, extra_data, commit_a=None, commit_b=None):
     """Returns the lines that have been modifed for this file.
 
     Args:
       filename: the file to check.
       extra_data: is the extra_data returned by modified_files. Additionally, a
         value of None means that the file was not modified.
-      commit: the complete sha1 (40 chars) of the commit. Note that specifying
-        this value will only work (100%) when commit == last_commit (with
-        respect to the currently checked out revision), otherwise, we could miss
-        some lines.
+      commit_a: the complete sha1 (40 chars) of the latest commit.
+      commit_b: the complete sha1 (40 chars) of the oldest commit.
 
-    Returns: a list of lines that were modified, or None in case all lines are
-      new.
+    Returns: a list of line numbers that were modified, or None in case all
+      lines are new.
     """
     if extra_data is None:
         return []
+
     if extra_data not in ('M ', ' M', 'MM'):
         return None
 
-    if commit is None:
-        commit = '0' * 40
-    commit = commit.encode('utf-8')
+    args = ['git', 'diff', '-U0']
 
-    # Split as bytes, as the output may have some non unicode characters.
-    blame_lines = subprocess.check_output(
-        ['git', 'blame', '--porcelain', filename]).split(
-            os.linesep.encode('utf-8'))
-    modified_line_numbers = utils.filter_lines(
-        blame_lines,
-        commit + br' (?P<line>\d+) (\d+)',
-        groups=('line',))
+    if commit_a is not None and commit_b is not None:
+        args += [commit_b, commit_a]
 
-    return list(map(int, modified_line_numbers))
+    args += ['--', filename]
+
+    try:
+        diff = subprocess.check_output(args).split(os.linesep.encode('utf-8'))
+        return format_lines(filter_diff(diff))
+    except:
+        return []
+
+
+def filter_diff(lines):
+    matcher = re.compile('@@ (-[0-9]+(,[0-9]+)?)? ?(\+[0-9]+(,[0-9]+)?) @@')
+    for l in lines:
+        m = re.match(matcher, l.decode('utf-8'))
+        if m and m.group(3):
+            yield m.group(3)
+
+
+def format_lines(lines):
+    """Formats a series of git diff line numbers
+
+    Args:
+      lines: a list of lines from git-diff specifying changed line numbers
+
+    Returns: a list of line numbers that have been modified
+    """
+    lines = (l.strip('+').split(',') for l in lines if l)
+    for l in lines:
+        if (len(l) > 1):
+            for i in range(int(l[0]), int(l[1])+int(l[0])):
+                yield i
+        else:
+            yield int(l[0])

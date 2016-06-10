@@ -87,16 +87,16 @@ class HgTest(unittest.TestCase):
                                   '? untracked.txt',
                                   'I ignored.txt',
                                   '  origin.txt']).encode('utf-8')
-        commit = '012012012012'
+        commit_a = '012012012012'
         with mock.patch('subprocess.check_output',
                         return_value=output) as hg_call:
             self.assertEqual(
                 {'/home/user/repo/docs/file1.txt': 'A',
                  '/home/user/repo/data/file2.json': 'M',
                  '/home/user/repo/untracked.txt': '?'},
-                hg.modified_files('/home/user/repo', commit=commit))
+                hg.modified_files('/home/user/repo', commit_a=commit_a, commit_b=None))
             hg_call.assert_called_once_with(
-                ['hg', 'status', '--change=%s' % commit])
+                ['hg', 'status', '--change=%s' % commit_a])
 
     def test_modified_files_non_absolute_root(self):
         with self.assertRaises(AssertionError):
@@ -133,15 +133,15 @@ class HgTest(unittest.TestCase):
             '@@ -600,0 +601,1 @@ class Test:',
             '+        import pprint',
             ]).encode('utf-8')
-        commit = '0123' * 10
+        commit_a = '0123' * 10
         with mock.patch('subprocess.check_output',
                         return_value=output) as hg_call:
             self.assertEqual(
                 [201, 202, 601],
                 list(hg.modified_lines(
-                    '/home/user/repo/foo/bar.txt', 'M', commit=commit)))
+                    '/home/user/repo/foo/bar.txt', 'M', commit_a=commit_a, commit_b=None)))
             hg_call.assert_called_once_with(
-                ['hg', 'diff', '-U', '0', '--change=%s' % commit,
+                ['hg', 'diff', '-U', '0', '--change=%s' % commit_a,
                  '/home/user/repo/foo/bar.txt'])
 
     def test_modified_lines_new_addition(self):
@@ -162,11 +162,11 @@ class HgTest(unittest.TestCase):
     def test_last_commit(self):
         with mock.patch('subprocess.check_output',
                         return_value=b'0a' * 20 + b'\n') as hg_call:
-            self.assertEqual('0a' * 20, hg.last_commit())
+            self.assertEqual(('0a' * 20, None), hg.last_commit())
             hg_call.asser_called_once_with(
                 ['hg', 'parent', '--template={node}'])
 
     def test_last_commit_not_in_repo(self):
         with mock.patch('subprocess.check_output',
                         side_effect=subprocess.CalledProcessError(255, '', '')):
-            self.assertEqual(None, hg.last_commit())
+            self.assertEqual((None, None), hg.last_commit())

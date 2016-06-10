@@ -24,17 +24,20 @@ It supports many filetypes, including:
 Usage:
     git-lint [-f | --force] [--json] [--last-commit] [FILENAME ...]
     git-lint [-t | --tracked] [-f | --force] [--json] [--last-commit]
+    git-lint --branch=<NAME>
     git-lint -h | --version
 
 Options:
-    -h             Show the usage patterns.
-    --version      Prints the version number.
-    -f --force     Shows all the lines with problems.
-    -t --tracked   Lints only tracked files.
-    --json         Prints the result as a json string. Useful to use it in
-                   conjunction with other tools.
-    --last-commit  Checks the last checked-out commit. This is mostly useful
-                   when used as: git checkout <revid>; git lint --last-commit.
+    -h               Show the usage patterns.
+    --version        Prints the version number.
+    -f --force       Shows all the lines with problems.
+    -t --tracked     Lints only tracked files.
+    --json           Prints the result as a json string. Useful to use it in
+                     conjunction with other tools.
+    --last-commit    Checks the last checked-out commit. This is mostly useful
+                     when used as: git checkout <revid>; git lint --last-commit.
+    --branch=<NAME>  Checks the diff of the current HEAD against target branch
+                     and lints all differences (git only)
 """
 
 from __future__ import unicode_literals
@@ -54,7 +57,7 @@ import gitlint.hg as hg
 import gitlint.linters as linters
 
 
-__VERSION__ = '0.0.6.1'
+__VERSION__ = '0.0.9.0'
 
 ERROR = termcolor.colored('ERROR', 'red', attrs=('bold',))
 SKIPPED = termcolor.colored('SKIPPED', 'yellow', attrs=('bold',))
@@ -186,9 +189,12 @@ def main(argv, stdout=sys.stdout, stderr=sys.stderr):
         stderr.write('fatal: Not a git repository' + linesep)
         return 128
 
-    commit = None
+    commit_a, commit_b = None, None
     if arguments['--last-commit']:
-        commit = vcs.last_commit()
+        commit_a, commit_b = vcs.last_commit()
+
+    if arguments['--branch']:
+        commit_a, commit_b = vcs.branch_commit(arguments['--branch'])
 
     if arguments['FILENAME']:
         invalid_filenames = find_invalid_filenames(arguments['FILENAME'],
@@ -201,7 +207,8 @@ def main(argv, stdout=sys.stdout, stderr=sys.stderr):
 
         changed_files = vcs.modified_files(repository_root,
                                            tracked_only=arguments['--tracked'],
-                                           commit=commit)
+                                           commit_a=commit_a,
+                                           commit_b=commit_b)
         modified_files = {}
         for filename in arguments['FILENAME']:
             normalized_filename = os.path.abspath(filename)
@@ -210,7 +217,8 @@ def main(argv, stdout=sys.stdout, stderr=sys.stderr):
     else:
         modified_files = vcs.modified_files(repository_root,
                                             tracked_only=arguments['--tracked'],
-                                            commit=commit)
+                                            commit_a=commit_a,
+                                            commit_b=commit_b)
 
     linter_not_found = False
     files_with_problems = 0
@@ -228,7 +236,8 @@ def main(argv, stdout=sys.stdout, stderr=sys.stderr):
         else:
             modified_lines = vcs.modified_lines(filename,
                                                 modified_files[filename],
-                                                commit=commit)
+                                                commit_a=commit_a,
+                                                commit_b=commit_b)
 
         result = linters.lint(
             filename, modified_lines, gitlint_config)
